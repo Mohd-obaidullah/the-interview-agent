@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+let baseUrl = import.meta.env.VITE_API_URL || '/api';
+// Ensure the base URL includes /api for production deployments where users forget to add it
+if (baseUrl.startsWith('http') && !baseUrl.endsWith('/api')) {
+  baseUrl = baseUrl.replace(/\/$/, '') + '/api';
+}
+
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: baseUrl,
   headers: {
     'Content-Type': 'application/json'
   }

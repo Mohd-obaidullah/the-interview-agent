@@ -46,6 +46,36 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Utility to print all registered routes
+const printRoutes = (app) => {
+  console.log('\n--- Registered Express Routes ---');
+  app._router.stack.forEach((middleware) => {
+    if (middleware.route) { // Routes registered directly on the app
+      const methods = Object.keys(middleware.route.methods).join(', ').toUpperCase();
+      console.log(`${methods} ${middleware.route.path}`);
+    } else if (middleware.name === 'router') { // Router middleware
+      middleware.handle.stack.forEach((handler) => {
+        if (handler.route) {
+          const methods = Object.keys(handler.route.methods).join(', ').toUpperCase();
+          let path = handler.route.path;
+          
+          // Reconstruct the base path from the middleware regexp if possible
+          let basePath = '';
+          const match = middleware.regexp.toString().match(/^\/\^\\\/(.*?)\\\/\?\(\?\=\\\/\|\$\)/);
+          if (match && match[1]) {
+            basePath = '/' + match[1].replace(/\\\//g, '/');
+          }
+          
+          console.log(`${methods} ${basePath}${path}`);
+        }
+      });
+    }
+  });
+  console.log('---------------------------------\n');
+};
+
+printRoutes(app);
+
 app.listen(PORT, HOST, () => {
   console.log(`🚀 The Interview Agent Backend listening on http://${HOST}:${PORT}`);
 });

@@ -1,4 +1,6 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const fs = require('fs');
+const path = require('path');
 
 const getApiKey = () => process.env.GEMINI_API_KEY || '';
 
@@ -97,6 +99,40 @@ const generateNextQuestion = async ({ jobRole, experienceLevel, interviewType, d
     return mockQuestions[Math.min(questionIndex, mockQuestions.length - 1)];
   }
 
+  // Curriculum RAG: Load curriculum and pick a topic
+  let curriculumContext = "";
+  try {
+    const curriculumPath = path.join(__dirname, '../../data/curriculum.json');
+    if (fs.existsSync(curriculumPath)) {
+      const curriculum = JSON.parse(fs.readFileSync(curriculumPath, 'utf8'));
+      // Naive RAG: Pick a curriculum day based on question index
+      const targetModule = curriculum[questionIndex % curriculum.length];
+      curriculumContext = `
+CURRICULUM FOCUS FOR THIS QUESTION:
+Module: ${targetModule.module}
+Objectives: ${targetModule.objectives.join(', ')}
+Tools: ${targetModule.tools.join(', ')}
+`;
+    }
+  } catch (err) {
+    console.error("Failed to load curriculum:", err.message);
+  }
+
+  // Follow-up Engine logic
+  const lastQnA = qnaHistory && qnaHistory.length > 0 ? qnaHistory[qnaHistory.length - 1] : null;
+  let previousContextStr = "";
+  if (lastQnA) {
+    previousContextStr = `
+PREVIOUS QUESTION: "${lastQnA.question}"
+CANDIDATE ANSWER: "${lastQnA.candidateAnswer}"
+PREVIOUS EVALUATION SCORE: ${lastQnA.evaluation?.overallQuestionScore || 'Unknown'}
+
+INSTRUCTIONS FOR FOLLOW-UP:
+If the candidate's answer was weak or missed important concepts, generate a FOLLOW-UP question drilling down into their specific mistake or knowledge gap.
+If the candidate's answer was strong, move on to the CURRICULUM FOCUS topic instead.
+`;
+  }
+
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
@@ -107,12 +143,12 @@ Level: ${experienceLevel}
 Difficulty: ${difficulty}
 Skills: ${candidateProfile?.skills ? candidateProfile.skills.join(', ') : 'Software Engineering'}
 
-Previous Q&A:
-${JSON.stringify(qnaHistory, null, 2)}
+${curriculumContext}
+${previousContextStr}
 
 Return strictly JSON format:
 {
-  "question": "string",
+  "question": "string (the next question to ask)",
   "category": "Technical | HR | Behavioral",
   "difficulty": "Easy | Medium | Hard"
 }`;

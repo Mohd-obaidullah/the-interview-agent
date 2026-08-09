@@ -24,6 +24,18 @@ const InterviewSchema = new mongoose.Schema({
   currentQuestionIndex: { type: Number, default: 0 },
   status: { type: String, enum: ['in-progress', 'completed', 'paused'], default: 'in-progress' },
   accessCode: { type: String },
+  
+  // Advanced AI Context & Memory
+  curriculumAwareness: [{
+    topic: String,
+    covered: { type: Boolean, default: false }
+  }],
+  sessionMemory: [{
+    contextKey: String,
+    contextValue: String,
+    timestamp: { type: Date, default: Date.now }
+  }],
+  
   qnaList: [QnASchema],
   finalReport: {
     overallScore: Number,

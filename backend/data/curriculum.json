@@ -1,0 +1,52 @@
+[
+  {
+    "day": 1,
+    "module": "Embeddings & Vector Databases",
+    "objectives": [
+      "Understand the purpose of dense vector embeddings",
+      "Explain cosine similarity and nearest neighbor search",
+      "Identify the differences between traditional SQL indexing and vector search"
+    ],
+    "tools": ["Pinecone", "Milvus", "OpenAI text-embedding-ada-002", "ChromaDB"]
+  },
+  {
+    "day": 2,
+    "module": "RAG (Retrieval-Augmented Generation)",
+    "objectives": [
+      "Explain the RAG pipeline (Retrieve, Augment, Generate)",
+      "Discuss chunking strategies for document processing",
+      "Identify methods for handling context limits and hallucination reduction"
+    ],
+    "tools": ["LangChain", "LlamaIndex", "Vector DB"]
+  },
+  {
+    "day": 3,
+    "module": "Prompt Engineering & Function Calling",
+    "objectives": [
+      "Demonstrate advanced prompt techniques (Few-shot, Chain of Thought)",
+      "Explain how function calling / tool use works in LLMs",
+      "Describe structured JSON output constraints"
+    ],
+    "tools": ["OpenAI Functions", "Gemini Tools", "JSON Schema"]
+  },
+  {
+    "day": 4,
+    "module": "Fine Tuning & LangChain Agents",
+    "objectives": [
+      "Differentiate between prompt engineering, RAG, and fine-tuning",
+      "Explain the anatomy of a LangChain Agent (LLM, Tools, Memory)",
+      "Discuss ReAct (Reasoning and Acting) loops"
+    ],
+    "tools": ["LangChain", "Hugging Face PEFT", "LoRA"]
+  },
+  {
+    "day": 5,
+    "module": "Production Systems & DevOps",
+    "objectives": [
+      "Explain containerization with Docker",
+      "Describe orchestration concepts using Kubernetes",
+      "Identify monitoring strategies for AI systems (latency, token usage, drift)"
+    ],
+    "tools": ["Docker", "Kubernetes", "Prometheus", "Grafana", "LangSmith"]
+  }
+]

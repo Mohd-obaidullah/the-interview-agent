@@ -25,8 +25,10 @@ router.get('/template/:code/submissions', authMiddleware, requireRole('interview
 router.get('/template/code/:code', authMiddleware, getTemplateByAccessCode);
 router.post('/start', authMiddleware, createInterview);
 router.post('/answer', authMiddleware, submitAnswer);
+router.post('/respond', authMiddleware, submitAnswer); // Hackathon alias
 router.post('/finish', authMiddleware, finishInterview);
 router.get('/history', authMiddleware, getInterviewHistory);
 router.get('/:id', authMiddleware, getInterviewById);
+router.get('/result/:sessionId', authMiddleware, getInterviewById); // Hackathon alias
 
 module.exports = router;

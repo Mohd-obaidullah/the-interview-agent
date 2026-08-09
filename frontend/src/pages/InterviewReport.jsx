@@ -15,28 +15,7 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
 
   const report = reportData || {
     overallScore: 82,
-    categoryScores: {
-      technical: 78,
-      relevance: 82,
-      completeness: 72,
-      problemSolving: 80,
-      communication: 85
-    },
-    totalQuestions: 5,
-    totalCorrect: 3,
-    totalPartiallyCorrect: 1,
-    totalIncorrect: 1,
-    totalMistakesCount: 2,
-    totalMissingConceptsCount: 3,
-    allMistakes: [
-      "Claimed JavaScript event loop runs microtasks asynchronously on a separate OS thread.",
-      "Omitted temporal dead zone initialization rules."
-    ],
-    allMissingConcepts: [
-      "Microtask vs Macrotask queue priorities",
-      "Temporal Dead Zone & hoisting behavior",
-      "Execution context stack frames"
-    ],
+    summary: "Evaluation complete based on 5 weighted criteria. Score calculated programmatically.",
     strengths: [
       "Clear explanation of component rendering lifecycles",
       "Good structure and professional vocabulary",
@@ -46,42 +25,34 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
       "Technical accuracy degrades when explaining low-level async mechanics",
       "Incomplete responses on edge case scenarios"
     ],
-    detailedFeedback: "Evaluation complete based on 6 weighted criteria (Technical Correctness 35%, Relevance 20%, Completeness 15%, Problem Solving 15%, Communication 10%, Professional Quality 5%). Score calculated programmatically.",
-    recommendedTopics: ["JavaScript Event Loop Queues", "Hoisting & TDZ", "Execution Context", "Async Code Patterns"],
-    personalizedPlan: [
-      "Review microtask and macrotask queue priority rules",
-      "Practice STAR framework to ensure completeness in responses",
-      "Conduct timed technical drills on async JS execution"
+    majorMistakes: [
+      "Claimed JavaScript event loop runs microtasks asynchronously on a separate OS thread.",
+      "Omitted temporal dead zone initialization rules."
     ],
-    readinessScore: 84
-  };
-
-  const qnaList = reportData?.qnaList || [
-    {
-      questionId: 1,
-      question: "Explain the event loop in JavaScript. How does it work with microtasks and macrotasks?",
-      category: "Technical",
-      difficulty: "Medium",
-      candidateAnswer: "The event loop runs microtasks from promises after macrotasks like setTimeout finishes.",
-      answerType: "text",
-      evaluation: {
-        overallQuestionScore: 68,
-        technicalAccuracy: 65,
-        relevance: 80,
+    minorMistakes: [
+      "Microtask vs Macrotask queue priorities",
+      "Temporal Dead Zone & hoisting behavior",
+      "Execution context stack frames"
+    ],
+    questionResults: [
+      {
+        question: "Explain the event loop in JavaScript. How does it work with microtasks and macrotasks?",
+        answer: "The event loop runs microtasks from promises after macrotasks like setTimeout finishes.",
+        score: 68,
+        correctness: 65,
+        technicalAccuracy: 60,
         completeness: 60,
-        problemSolving: 70,
-        communication: 80,
-        professionalQuality: 75,
+        relevance: 80,
+        clarity: 80,
         mistakes: ["Stated macrotasks execute before microtasks."],
-        incorrectStatements: ["Claimed setTimeout queue takes priority over Promise.then queue."],
-        missingConcepts: ["Microtasks execute to completion before next macrotask is dequeued."],
-        strengths: ["Directly addressed the question."],
-        weaknesses: ["Factual mistake on queue execution priority order."],
-        suggestedAnswer: "The event loop continuously monitors the call stack. When empty, it processes ALL pending microtasks (Promises) first before executing the next macrotask (setTimeout).",
+        improvedAnswer: "The event loop continuously monitors the call stack. When empty, it processes ALL pending microtasks (Promises) first before executing the next macrotask (setTimeout).",
         feedback: "Partially correct answer with a factual mistake on queue priority."
       }
-    }
-  ];
+    ],
+    recommendation: "Focus on JavaScript Event Loop Queues, Hoisting & TDZ, Execution Context, Async Code Patterns"
+  };
+
+  const qnaList = report.questionResults || [];
 
   const handleDownload = () => {
     const text = JSON.stringify(report, null, 2);
@@ -103,6 +74,19 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
   };
 
   const overallBand = getScoreBand(report.overallScore);
+
+  const totalCorrect = qnaList.filter(q => q.score >= 80).length;
+  const totalPartiallyCorrect = qnaList.filter(q => q.score >= 60 && q.score < 80).length;
+  const totalIncorrect = qnaList.filter(q => q.score < 60).length;
+
+  const totalMistakesCount = report.majorMistakes?.length || 0;
+  const totalMissingConceptsCount = report.minorMistakes?.length || 0;
+
+  const avgCorrectness = qnaList.length ? Math.round(qnaList.reduce((acc, q) => acc + (q.correctness || 0), 0) / qnaList.length) : 0;
+  const avgTechAcc = qnaList.length ? Math.round(qnaList.reduce((acc, q) => acc + (q.technicalAccuracy || 0), 0) / qnaList.length) : 0;
+  const avgCompleteness = qnaList.length ? Math.round(qnaList.reduce((acc, q) => acc + (q.completeness || 0), 0) / qnaList.length) : 0;
+  const avgRelevance = qnaList.length ? Math.round(qnaList.reduce((acc, q) => acc + (q.relevance || 0), 0) / qnaList.length) : 0;
+  const avgClarity = qnaList.length ? Math.round(qnaList.reduce((acc, q) => acc + (q.clarity || 0), 0) / qnaList.length) : 0;
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8">
@@ -166,15 +150,15 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
               <div className="space-y-2 pt-1">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-emerald-400 font-bold flex items-center gap-1"><Check className="w-4 h-4" /> Correct (80-100)</span>
-                  <span className="font-bold text-white">{report.totalCorrect || 0}</span>
+                  <span className="font-bold text-white">{totalCorrect}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-amber-400 font-bold flex items-center gap-1"><Sparkles className="w-4 h-4" /> Partial (60-79)</span>
-                  <span className="font-bold text-white">{report.totalPartiallyCorrect || 0}</span>
+                  <span className="font-bold text-white">{totalPartiallyCorrect}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-rose-400 font-bold flex items-center gap-1"><X className="w-4 h-4" /> Weak (&lt;60)</span>
-                  <span className="font-bold text-white">{report.totalIncorrect || 0}</span>
+                  <span className="font-bold text-white">{totalIncorrect}</span>
                 </div>
               </div>
             </div>
@@ -183,7 +167,7 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
             <div className="glass-panel p-6 rounded-3xl text-center space-y-2 border border-rose-500/20">
               <ShieldAlert className="w-7 h-7 text-rose-400 mx-auto" />
               <span className="text-xs font-bold text-slate-400 uppercase block">Total Technical Mistakes</span>
-              <span className="text-3xl font-extrabold text-rose-400">{report.totalMistakesCount || 0}</span>
+              <span className="text-3xl font-extrabold text-rose-400">{totalMistakesCount}</span>
               <p className="text-[11px] text-slate-400">Penalties applied programmatically</p>
             </div>
 
@@ -191,23 +175,27 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
             <div className="glass-panel p-6 rounded-3xl text-center space-y-2 border border-amber-500/20">
               <AlertTriangle className="w-7 h-7 text-amber-400 mx-auto" />
               <span className="text-xs font-bold text-slate-400 uppercase block">Missing Key Concepts</span>
-              <span className="text-3xl font-extrabold text-amber-400">{report.totalMissingConceptsCount || 0}</span>
+              <span className="text-3xl font-extrabold text-amber-400">{totalMissingConceptsCount}</span>
               <p className="text-[11px] text-slate-400">Target topics for study</p>
             </div>
           </div>
 
-          {/* 6 Criteria Weighted Score Bars */}
+          <div className="glass-panel p-6 rounded-3xl">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-2">Summary</h4>
+              <p className="text-slate-300 text-sm leading-relaxed">{report.summary}</p>
+          </div>
+
+          {/* Criteria Weighted Score Bars */}
           <div className="glass-panel p-6 rounded-3xl space-y-4">
-            <h4 className="text-sm font-bold text-white uppercase tracking-wider">6 Evidence Criteria Breakdown</h4>
+            <h4 className="text-sm font-bold text-white uppercase tracking-wider">5 Evidence Criteria Breakdown</h4>
 
             <div className="grid md:grid-cols-2 gap-4">
               {[
-                { label: 'Technical Correctness (35%)', score: report.categoryScores?.technical || 78 },
-                { label: 'Relevance (20%)', score: report.categoryScores?.relevance || 82 },
-                { label: 'Completeness (15%)', score: report.categoryScores?.completeness || 72 },
-                { label: 'Problem Solving (15%)', score: report.categoryScores?.problemSolving || 80 },
-                { label: 'Communication (10%)', score: report.categoryScores?.communication || 85 },
-                { label: 'Professional Quality (5%)', score: report.categoryScores?.professional || 80 },
+                { label: 'Correctness (30%)', score: avgCorrectness },
+                { label: 'Technical Accuracy (25%)', score: avgTechAcc },
+                { label: 'Completeness (20%)', score: avgCompleteness },
+                { label: 'Relevance (15%)', score: avgRelevance },
+                { label: 'Clarity / Reasoning (10%)', score: avgClarity },
               ].map((item, idx) => (
                 <div key={idx} className="p-3 rounded-2xl bg-slate-900/60 border border-slate-800">
                   <div className="flex justify-between text-xs font-bold mb-1">
@@ -227,11 +215,11 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
             {/* Technical Mistakes List */}
             <div className="glass-panel p-6 rounded-3xl space-y-3 border border-rose-500/20">
               <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-                <X className="w-4 h-4" /> Detected Technical Mistakes
+                <X className="w-4 h-4" /> Detected Major Mistakes
               </h4>
-              {report.allMistakes && report.allMistakes.length > 0 ? (
+              {report.majorMistakes && report.majorMistakes.length > 0 ? (
                 <ul className="space-y-2 text-xs text-slate-300">
-                  {report.allMistakes.map((mst, idx) => (
+                  {report.majorMistakes.map((mst, idx) => (
                     <li key={idx} className="flex items-start gap-2">
                       <span className="w-1.5 h-1.5 bg-rose-400 rounded-full mt-1.5 shrink-0"></span>
                       <span>{mst}</span>
@@ -246,11 +234,11 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
             {/* Missing Concepts List */}
             <div className="glass-panel p-6 rounded-3xl space-y-3 border border-amber-500/20">
               <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4" /> Missing Expected Concepts
+                <AlertTriangle className="w-4 h-4" /> Minor Mistakes / Missing Concepts
               </h4>
-              {report.allMissingConcepts && report.allMissingConcepts.length > 0 ? (
+              {report.minorMistakes && report.minorMistakes.length > 0 ? (
                 <ul className="space-y-2 text-xs text-slate-300">
-                  {report.allMissingConcepts.map((msc, idx) => (
+                  {report.minorMistakes.map((msc, idx) => (
                     <li key={idx} className="flex items-start gap-2">
                       <span className="w-1.5 h-1.5 bg-amber-400 rounded-full mt-1.5 shrink-0"></span>
                       <span>{msc}</span>
@@ -262,6 +250,11 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
               )}
             </div>
           </div>
+          
+          <div className="glass-panel p-6 rounded-3xl">
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-2">Recommendation</h4>
+              <p className="text-slate-300 text-sm leading-relaxed">{report.recommendation}</p>
+          </div>
         </div>
       )}
 
@@ -269,8 +262,7 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
       {activeTab === 'qna' && (
         <div className="space-y-6">
           {qnaList.map((item, idx) => {
-            const ev = item.evaluation || {};
-            const qScore = ev.overallQuestionScore || 70;
+            const qScore = item.score || 0;
             const qBand = getScoreBand(qScore);
 
             return (
@@ -279,10 +271,7 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
                   <div className="space-y-1">
                     <div className="flex items-center space-x-2">
                       <span className="px-2.5 py-0.5 rounded bg-purple-500/10 text-purple-400 text-[10px] font-bold">
-                        Question {idx + 1} ({item.category || 'Technical'})
-                      </span>
-                      <span className="px-2.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
-                        {item.difficulty || 'Medium'}
+                        Question {idx + 1}
                       </span>
                     </div>
                     <h4 className="text-base font-bold text-white">{item.question}</h4>
@@ -296,26 +285,34 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
 
                 {/* Candidate Answer */}
                 <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-1">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase block">Candidate Answer ({item.answerType || 'text'}):</span>
-                  <p className="text-xs text-slate-200 leading-relaxed italic">"{item.candidateAnswer || 'No response recorded.'}"</p>
+                  <span className="text-[11px] font-bold text-slate-400 uppercase block">Candidate Answer:</span>
+                  <p className="text-xs text-slate-200 leading-relaxed italic">"{item.answer || 'No response recorded.'}"</p>
+                </div>
+                
+                {/* Score Breakdown for Question */}
+                <div className="grid grid-cols-5 gap-2 text-[10px] text-center font-semibold">
+                    <div className="p-2 bg-slate-800 rounded-lg">Correct: <span className="text-white block">{item.correctness}/100</span></div>
+                    <div className="p-2 bg-slate-800 rounded-lg">Accuracy: <span className="text-white block">{item.technicalAccuracy}/100</span></div>
+                    <div className="p-2 bg-slate-800 rounded-lg">Complete: <span className="text-white block">{item.completeness}/100</span></div>
+                    <div className="p-2 bg-slate-800 rounded-lg">Relevant: <span className="text-white block">{item.relevance}/100</span></div>
+                    <div className="p-2 bg-slate-800 rounded-lg">Clarity: <span className="text-white block">{item.clarity}/100</span></div>
                 </div>
 
-                {/* mistakes & missing concepts in this question */}
-                {ev.mistakes && ev.mistakes.length > 0 && (
+                {/* mistakes in this question */}
+                {item.mistakes && item.mistakes.length > 0 && (
                   <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-500/20 text-xs text-rose-300 space-y-1">
                     <span className="font-bold block flex items-center gap-1"><X className="w-3.5 h-3.5 text-rose-400" /> Mistakes Identified:</span>
                     <ul className="list-disc pl-4 space-y-0.5">
-                      {ev.mistakes.map((m, i) => <li key={i}>{m}</li>)}
+                      {item.mistakes.map((m, i) => <li key={i}>{m}</li>)}
                     </ul>
                   </div>
                 )}
 
-                {ev.missingConcepts && ev.missingConcepts.length > 0 && (
-                  <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/20 text-xs text-amber-300 space-y-1">
-                    <span className="font-bold block flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5 text-amber-400" /> Missing Concepts:</span>
-                    <ul className="list-disc pl-4 space-y-0.5">
-                      {ev.missingConcepts.map((m, i) => <li key={i}>{m}</li>)}
-                    </ul>
+                {/* Feedback */}
+                 {item.feedback && (
+                  <div className="p-3 rounded-xl bg-slate-800 border border-slate-700 text-xs space-y-1">
+                    <span className="font-bold block flex items-center gap-1 text-slate-300">Feedback:</span>
+                    <p className="text-slate-300">{item.feedback}</p>
                   </div>
                 )}
 
@@ -324,7 +321,7 @@ export default function InterviewReport({ reportData, onPracticeAgain }) {
                   <span className="font-bold text-indigo-300 block flex items-center gap-1">
                     <Sparkles className="w-4 h-4 text-cyan-400" /> Suggested Correct / Model Answer:
                   </span>
-                  <p className="text-slate-200 leading-relaxed">{ev.suggestedAnswer || "Refer to core documentation."}</p>
+                  <p className="text-slate-200 leading-relaxed">{item.improvedAnswer || "Refer to core documentation."}</p>
                 </div>
               </div>
             );

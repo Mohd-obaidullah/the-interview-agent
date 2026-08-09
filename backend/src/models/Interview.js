@@ -7,18 +7,7 @@ const QnASchema = new mongoose.Schema({
   difficulty: String,
   candidateAnswer: String,
   answerType: { type: String, enum: ['voice', 'text'], default: 'text' },
-  evaluation: {
-    technicalAccuracy: Number,
-    relevance: Number,
-    clarity: Number,
-    communication: Number,
-    confidence: Number,
-    depthOfKnowledge: Number,
-    problemSolving: Number,
-    overallQuestionScore: Number,
-    feedback: String,
-    improvementHint: String
-  },
+  evaluation: mongoose.Schema.Types.Mixed, // Storing raw evaluation for flexibility
   answeredAt: Date
 });
 
@@ -34,24 +23,30 @@ const InterviewSchema = new mongoose.Schema({
   totalQuestionsCount: { type: Number, default: 10 },
   currentQuestionIndex: { type: Number, default: 0 },
   status: { type: String, enum: ['in-progress', 'completed', 'paused'], default: 'in-progress' },
+  accessCode: { type: String },
   qnaList: [QnASchema],
   finalReport: {
     overallScore: Number,
-    categoryScores: {
-      technical: Number,
-      communication: Number,
-      confidence: Number,
-      relevance: Number,
-      depth: Number,
-      problemSolving: Number
-    },
+    summary: String,
     strengths: [String],
     weaknesses: [String],
-    questionsToImprove: [{ question: String, issue: String }],
-    detailedFeedback: String,
-    recommendedTopics: [String],
-    personalizedPlan: [String],
-    readinessScore: Number
+    majorMistakes: [String],
+    minorMistakes: [String],
+    questionResults: [
+      {
+        question: String,
+        answer: String,
+        score: Number,
+        correctness: Number,
+        relevance: Number,
+        technicalAccuracy: Number,
+        completeness: Number,
+        feedback: String,
+        mistakes: [String],
+        improvedAnswer: String
+      }
+    ],
+    recommendation: String
   },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

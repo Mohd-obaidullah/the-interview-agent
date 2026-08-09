@@ -1,26 +1,8 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-
-// In-memory user fallback storage
-const inMemoryUsers = [
-  {
-    _id: 'student_demo_123',
-    firstName: 'Anas',
-    lastName: 'Dev',
-    email: 'student@example.com',
-    role: 'student',
-    passwordHash: '$2a$10$e8W/X21wJk2O4uA7gN.4b.67.e.x.a.m.p.l.e'
-  },
-  {
-    _id: 'interviewer_demo_456',
-    firstName: 'Sarah',
-    lastName: 'Recruiter',
-    email: 'interviewer@example.com',
-    role: 'interviewer',
-    passwordHash: '$2a$10$e8W/X21wJk2O4uA7gN.4b.67.e.x.a.m.p.l.e'
-  }
-];
+const Interview = require('../models/Interview');
+const InterviewTemplate = require('../models/InterviewTemplate');
 
 const registerUser = async (req, res) => {
   try {
@@ -44,34 +26,21 @@ const registerUser = async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    const existingInMemory = inMemoryUsers.find(u => u.email === normalizedEmail);
-    if (existingInMemory) {
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
       return res.status(400).json({ error: 'An account with this email already exists.' });
     }
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    const newUser = {
-      _id: `user_${Date.now()}`,
+    const newUser = await User.create({
       firstName,
       lastName,
       email: normalizedEmail,
-      role,
-      passwordHash
-    };
-
-    inMemoryUsers.push(newUser);
-
-    try {
-      await User.create({
-        firstName,
-        lastName,
-        email: normalizedEmail,
-        password: passwordHash,
-        role
-      });
-    } catch (e) {}
+      password: passwordHash,
+      role
+    });
 
     const token = jwt.sign(
       { userId: newUser._id, role: newUser.role, name: `${firstName} ${lastName}` },
@@ -105,30 +74,15 @@ const loginUser = async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    let user = inMemoryUsers.find(u => u.email === normalizedEmail);
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
-      try {
-        const dbUser = await User.findOne({ email: normalizedEmail });
-        if (dbUser) {
-          user = {
-            _id: dbUser._id.toString(),
-            firstName: dbUser.firstName,
-            lastName: dbUser.lastName,
-            email: dbUser.email,
-            role: dbUser.role,
-            passwordHash: dbUser.password
-          };
-        }
-      } catch (e) {}
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
-
-    if (!user) {
-      if (expectedRole === 'interviewer') {
-        user = inMemoryUsers[1];
-      } else {
-        user = inMemoryUsers[0];
-      }
+    
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
     if (expectedRole && user.role !== expectedRole) {
@@ -174,22 +128,39 @@ const forgotPassword = async (req, res) => {
 
 const getProfile = async (req, res) => {
   try {
-    let user = inMemoryUsers.find(u => u._id === req.userId);
+    const user = await User.findById(req.userId);
     if (!user) {
-      user = req.userRole === 'interviewer' ? inMemoryUsers[1] : inMemoryUsers[0];
+      return res.status(404).json({ error: 'User not found' });
     }
 
     const isStudent = user.role === 'student';
-    
-    // Live calculated stats
-    const stats = isStudent ? {
-      interviewsCompleted: 12,
-      averageScore: 76,
-      bestScore: 92
-    } : {
-      interviewsCreated: 4,
-      candidatesEvaluated: 48
-    };
+    let stats = {};
+
+    if (isStudent) {
+      const interviews = await Interview.find({ userId: req.userId, status: 'completed' });
+      const avgScore = interviews.length > 0 ? Math.round(interviews.reduce((acc, curr) => acc + (curr.finalReport?.overallScore || 0), 0) / interviews.length) : 0;
+      const bestScore = interviews.length > 0 ? Math.max(...interviews.map(i => i.finalReport?.overallScore || 0)) : 0;
+      stats = {
+        interviewsCompleted: interviews.length,
+        averageScore: avgScore,
+        bestScore: bestScore
+      };
+    } else {
+      const templates = await InterviewTemplate.find({ interviewerId: req.userId });
+      const templateIds = templates.map(t => t._id);
+      const accessCodes = templates.map(t => t.accessCode);
+      const candidates = await Interview.find({
+        $or: [
+          { templateId: { $in: templateIds } },
+          { accessCode: { $in: accessCodes } },
+          { interviewerId: req.userId }
+        ]
+      });
+      stats = {
+        interviewsCreated: templates.length,
+        candidatesEvaluated: candidates.length
+      };
+    }
 
     res.json({
       user: {
@@ -214,17 +185,10 @@ const updateProfile = async (req, res) => {
       return res.status(400).json({ error: 'First Name and Last Name are required.' });
     }
 
-    let user = inMemoryUsers.find(u => u._id === req.userId);
+    const user = await User.findByIdAndUpdate(req.userId, { firstName, lastName }, { new: true });
     if (!user) {
-      user = req.userRole === 'interviewer' ? inMemoryUsers[1] : inMemoryUsers[0];
+      return res.status(404).json({ error: 'User not found' });
     }
-
-    user.firstName = firstName;
-    user.lastName = lastName;
-
-    try {
-      await User.findByIdAndUpdate(user._id, { firstName, lastName });
-    } catch (e) {}
 
     res.json({
       message: 'Profile updated successfully',
@@ -258,20 +222,21 @@ const changePassword = async (req, res) => {
       return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
     }
 
-    let user = inMemoryUsers.find(u => u._id === req.userId);
+    const user = await User.findById(req.userId);
     if (!user) {
-      user = req.userRole === 'interviewer' ? inMemoryUsers[1] : inMemoryUsers[0];
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    // Hash new password securely using bcrypt
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Incorrect current password.' });
+    }
+
     const salt = await bcrypt.genSalt(10);
     const newHash = await bcrypt.hash(newPassword, salt);
 
-    user.passwordHash = newHash;
-
-    try {
-      await User.findByIdAndUpdate(user._id, { password: newHash });
-    } catch (e) {}
+    user.password = newHash;
+    await user.save();
 
     res.json({
       message: 'Password changed successfully! Please use your new password next time you log in.'

@@ -4,16 +4,15 @@ const getApiKey = () => process.env.GEMINI_API_KEY || '';
 
 // Deterministic Programmatic Weighted Score Calculation Function
 const calculateWeightedScore = (criteria, mistakes = [], missingConcepts = []) => {
-  const tech = Math.min(100, Math.max(0, criteria.technical_correctness || 0));
-  const rel = Math.min(100, Math.max(0, criteria.relevance || 0));
-  const comp = Math.min(100, Math.max(0, criteria.completeness || 0));
-  const ps = Math.min(100, Math.max(0, criteria.problem_solving || 0));
-  const comm = Math.min(100, Math.max(0, criteria.communication || 0));
-  const prof = Math.min(100, Math.max(0, criteria.professional_quality || 0));
+  const correctness = Math.min(100, Math.max(0, criteria.correctness || 0));
+  const technicalAccuracy = Math.min(100, Math.max(0, criteria.technicalAccuracy || 0));
+  const completeness = Math.min(100, Math.max(0, criteria.completeness || 0));
+  const relevance = Math.min(100, Math.max(0, criteria.relevance || 0));
+  const clarity = Math.min(100, Math.max(0, criteria.clarity || 0));
 
   // Weighted sum using exact specified percentages:
-  // Technical Correctness: 35%, Relevance: 20%, Completeness: 15%, Problem Solving: 15%, Communication: 10%, Professional Quality: 5%
-  let rawWeightedScore = (tech * 0.35) + (rel * 0.20) + (comp * 0.15) + (ps * 0.15) + (comm * 0.10) + (prof * 0.05);
+  // Correctness: 30%, Technical Accuracy: 25%, Completeness: 20%, Relevance: 15%, Clarity/Reasoning: 10%
+  let rawWeightedScore = (correctness * 0.30) + (technicalAccuracy * 0.25) + (completeness * 0.20) + (relevance * 0.15) + (clarity * 0.10);
 
   // Apply programmatic penalties for mistakes and missing concepts
   const mistakePenalty = (mistakes?.length || 0) * 4;
@@ -21,18 +20,17 @@ const calculateWeightedScore = (criteria, mistakes = [], missingConcepts = []) =
   
   let finalScore = Math.round(Math.max(0, Math.min(100, rawWeightedScore - mistakePenalty - missingPenalty)));
 
-  // Strict score cap if technical correctness is low (prevents confident but incorrect answers from scoring high)
-  if (tech < 50) {
-    finalScore = Math.min(finalScore, tech + 10);
+  // Strict score cap if correctness is low (prevents confident but incorrect answers from scoring high)
+  if (correctness < 50) {
+    finalScore = Math.min(finalScore, correctness + 10);
   }
 
   return {
-    technicalAccuracy: tech,
-    relevance: rel,
-    completeness: comp,
-    problemSolving: ps,
-    communication: comm,
-    professionalQuality: prof,
+    correctness,
+    technicalAccuracy,
+    completeness,
+    relevance,
+    clarity,
     overallQuestionScore: finalScore
   };
 };
@@ -136,18 +134,16 @@ const evaluateAnswer = async ({ question, candidateAnswer, jobRole, experienceLe
   const apiKey = getApiKey();
   
   if (!apiKey || apiKey === 'YOUR_GEMINI_API_KEY_HERE') {
-    // Evidence-based evaluation mock if no key
     const text = (candidateAnswer || '').trim();
     const wordCount = text.split(' ').length;
     const isShort = wordCount < 10;
     
     const criteria = {
-      technical_correctness: isShort ? 45 : 75,
-      relevance: isShort ? 50 : 80,
+      correctness: isShort ? 45 : 75,
+      technicalAccuracy: isShort ? 50 : 80,
       completeness: isShort ? 35 : 70,
-      problem_solving: isShort ? 40 : 75,
-      communication: isShort ? 60 : 80,
-      professional_quality: isShort ? 60 : 75
+      relevance: isShort ? 40 : 75,
+      clarity: isShort ? 60 : 80
     };
 
     const mistakes = isShort ? ["Answer is overly vague and lacks core technical definitions."] : ["Could mention edge case handling."];
@@ -179,13 +175,12 @@ Question Asked: "${question}"
 Candidate Answer: "${candidateAnswer}"
 
 EVALUATION RULES:
-1. Grade the answer objectively across 6 criteria on a 0-100 scale:
-   - technical_correctness (35% weight): Is the technical logic factually accurate? Low score if claims are incorrect regardless of tone.
-   - relevance (20% weight): Did candidate answer the exact question directly? Low score if off-topic.
-   - completeness (15% weight): Did candidate cover key expected sub-topics? Low score if key concepts missing.
-   - problem_solving (15% weight): Shows logical reasoning and problem-solving depth?
-   - communication (10% weight): Is explanation structured and readable?
-   - professional_quality (5% weight): Professional vocabulary and clarity.
+1. Grade the answer objectively across 5 criteria on a 0-100 scale:
+   - correctness (30% weight): Is the answer factually and conceptually correct?
+   - technicalAccuracy (25% weight): Correct technical details, terminology and reasoning.
+   - completeness (20% weight): Important concepts and required parts included.
+   - relevance (15% weight): Did candidate answer the exact question directly?
+   - clarity (10% weight): Organization, explanation and logical reasoning.
 
 2. SCORE BAND BENCHMARKS:
    - 90-100: Excellent answer covering almost all key concepts accurately.
@@ -204,12 +199,11 @@ EVALUATION RULES:
 
 Return strictly raw valid JSON format:
 {
-  "technical_correctness": number,
-  "relevance": number,
+  "correctness": number,
+  "technicalAccuracy": number,
   "completeness": number,
-  "problem_solving": number,
-  "communication": number,
-  "professional_quality": number,
+  "relevance": number,
+  "clarity": number,
   "mistakes": ["string"],
   "incorrect_statements": ["string"],
   "missing_concepts": ["string"],
@@ -223,14 +217,13 @@ Return strictly raw valid JSON format:
     const cleanJson = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
     const rawEval = JSON.parse(cleanJson);
 
-    // Compute final score programmatically using 35%/20%/15%/15%/10%/5% weights
+    // Compute final score programmatically
     const criteria = {
-      technical_correctness: rawEval.technical_correctness || 70,
-      relevance: rawEval.relevance || 70,
+      correctness: rawEval.correctness || 70,
+      technicalAccuracy: rawEval.technicalAccuracy || 70,
       completeness: rawEval.completeness || 65,
-      problem_solving: rawEval.problem_solving || 65,
-      communication: rawEval.communication || 75,
-      professional_quality: rawEval.professional_quality || 75
+      relevance: rawEval.relevance || 70,
+      clarity: rawEval.clarity || 75
     };
 
     const mistakes = rawEval.mistakes || [];
@@ -251,12 +244,11 @@ Return strictly raw valid JSON format:
   } catch (err) {
     console.error('Gemini Evaluation Error:', err.message);
     const fallbackCriteria = {
-      technical_correctness: 65,
-      relevance: 70,
+      correctness: 65,
+      technicalAccuracy: 60,
       completeness: 60,
-      problem_solving: 60,
-      communication: 75,
-      professional_quality: 70
+      relevance: 70,
+      clarity: 75
     };
     return {
       ...calculateWeightedScore(fallbackCriteria, ["Answer lacked detailed mechanics."], ["Core execution context"]),
@@ -278,15 +270,6 @@ const generateFinalReport = async (interviewData) => {
   
   // Calculate aggregate metrics programmatically
   let totalScoreSum = 0;
-  let totalTechSum = 0;
-  let totalRelSum = 0;
-  let totalCompSum = 0;
-  let totalPSSum = 0;
-  let totalCommSum = 0;
-
-  let totalCorrect = 0; // score >= 80
-  let totalPartiallyCorrect = 0; // 60 <= score < 80
-  let totalIncorrect = 0; // score < 60
 
   let allMistakes = [];
   let allMissingConcepts = [];
@@ -298,15 +281,6 @@ const generateFinalReport = async (interviewData) => {
     const score = ev.overallQuestionScore || 70;
 
     totalScoreSum += score;
-    totalTechSum += (ev.technicalAccuracy || 70);
-    totalRelSum += (ev.relevance || 70);
-    totalCompSum += (ev.completeness || 65);
-    totalPSSum += (ev.problemSolving || 65);
-    totalCommSum += (ev.communication || 75);
-
-    if (score >= 80) totalCorrect++;
-    else if (score >= 60) totalPartiallyCorrect++;
-    else totalIncorrect++;
 
     if (ev.mistakes) allMistakes.push(...ev.mistakes);
     if (ev.missingConcepts) allMissingConcepts.push(...ev.missingConcepts);
@@ -317,37 +291,27 @@ const generateFinalReport = async (interviewData) => {
   const count = qnaList.length || 1;
   const overallScore = Math.round(totalScoreSum / count);
 
-  const categoryScores = {
-    technical: Math.round(totalTechSum / count),
-    relevance: Math.round(totalRelSum / count),
-    completeness: Math.round(totalCompSum / count),
-    problemSolving: Math.round(totalPSSum / count),
-    communication: Math.round(totalCommSum / count)
-  };
-
-  const readinessScore = Math.max(0, Math.min(100, Math.round(overallScore * 1.05)));
-
   return {
     overallScore,
-    categoryScores,
-    readinessScore,
-    totalQuestions: count,
-    totalCorrect,
-    totalPartiallyCorrect,
-    totalIncorrect,
-    totalMistakesCount: allMistakes.length,
-    totalMissingConceptsCount: allMissingConcepts.length,
-    allMistakes: Array.from(new Set(allMistakes)),
-    allMissingConcepts: Array.from(new Set(allMissingConcepts)),
+    summary: `Evidence-based evaluation completed over ${count} question(s). Overall score calculated programmatically at ${overallScore}/100.`,
     strengths: Array.from(new Set(allStrengths)).slice(0, 5),
     weaknesses: Array.from(new Set(allWeaknesses)).slice(0, 5),
-    detailedFeedback: `Evidence-based evaluation completed over ${count} question(s). Overall score calculated programmatically at ${overallScore}/100 with ${totalCorrect} correct, ${totalPartiallyCorrect} partially correct, and ${totalIncorrect} weak responses.`,
-    recommendedTopics: Array.from(new Set(allMissingConcepts)).slice(0, 4),
-    personalizedPlan: [
-      "Review missing technical concepts highlighted in your report",
-      "Practice structuring answers using STAR & technical framework methods",
-      "Conduct mock technical screens under timed conditions"
-    ]
+    majorMistakes: Array.from(new Set(allMistakes)).slice(0, 5),
+    minorMistakes: Array.from(new Set(allMissingConcepts)).slice(0, 5),
+    questionResults: qnaList.map(qna => ({
+      question: qna.question || '',
+      answer: qna.candidateAnswer || '',
+      score: qna.evaluation?.overallQuestionScore || 0,
+      correctness: qna.evaluation?.correctness || 0,
+      technicalAccuracy: qna.evaluation?.technicalAccuracy || 0,
+      completeness: qna.evaluation?.completeness || 0,
+      relevance: qna.evaluation?.relevance || 0,
+      clarity: qna.evaluation?.clarity || 0,
+      feedback: qna.evaluation?.feedback || "",
+      mistakes: qna.evaluation?.mistakes || [],
+      improvedAnswer: qna.evaluation?.suggestedAnswer || ""
+    })),
+    recommendation: `Focus on ${Array.from(new Set(allMissingConcepts)).slice(0, 4).join(', ') || 'general improvements'}`
   };
 };
 

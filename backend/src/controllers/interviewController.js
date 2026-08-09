@@ -1,11 +1,8 @@
 const { generateNextQuestion, evaluateAnswer, generateFinalReport } = require('../services/geminiService');
 const { resumeStorage } = require('./resumeController');
+const InterviewTemplate = require('../models/InterviewTemplate');
+const Interview = require('../models/Interview');
 
-// In-memory databases
-const templatesDb = {};
-const interviewsDb = {};
-
-// Helper to generate access code like INT-98A41
 const generateAccessCode = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = 'INT-';
@@ -15,36 +12,6 @@ const generateAccessCode = () => {
   return code;
 };
 
-// Seed initial default interviewer template
-const seedInitialTemplate = () => {
-  const code = 'INT-STUDENT1';
-  if (!templatesDb[code]) {
-    templatesDb[code] = {
-      id: 'tpl_default_1',
-      interviewerId: 'interviewer_demo_456',
-      interviewerName: 'Sarah Recruiter',
-      title: 'Full Stack Engineer Technical Screen',
-      jobRole: 'Full Stack Developer',
-      skills: ['JavaScript', 'React', 'Node.js', 'System Design'],
-      difficulty: 'Medium',
-      totalQuestionsCount: 5,
-      timeLimitMinutes: 30,
-      status: 'published',
-      accessCode: code,
-      questions: [
-        { questionId: 1, question: "Explain the event loop in JavaScript. How does it work with microtasks and macrotasks?", category: "Technical", difficulty: "Medium" },
-        { questionId: 2, question: "How do React hooks work under the hood, and what are the Rules of Hooks?", category: "Technical", difficulty: "Medium" },
-        { questionId: 3, question: "How would you design a REST API backend with Express and MongoDB for high concurrency?", category: "Technical", difficulty: "Hard" },
-        { questionId: 4, question: "Describe a challenging technical problem you solved in a past project.", category: "Behavioral", difficulty: "Medium" },
-        { questionId: 5, question: "What are web sockets and how do they differ from HTTP long polling?", category: "Technical", difficulty: "Medium" }
-      ],
-      createdAt: new Date()
-    };
-  }
-};
-seedInitialTemplate();
-
-// 1. Interviewer creates an interview
 const createTemplate = async (req, res) => {
   try {
     const { title, jobRole, skills, difficulty, totalQuestionsCount, timeLimitMinutes } = req.body;
@@ -74,11 +41,9 @@ const createTemplate = async (req, res) => {
       });
     }
 
-    const templateId = `tpl_${Date.now()}`;
     const accessCode = generateAccessCode();
 
-    const newTemplate = {
-      id: templateId,
+    const newTemplate = new InterviewTemplate({
       interviewerId: req.userId || 'interviewer_demo_456',
       interviewerName: req.user?.name || 'Recruiter',
       title,
@@ -89,11 +54,10 @@ const createTemplate = async (req, res) => {
       timeLimitMinutes: parseInt(timeLimitMinutes) || 30,
       status: 'draft',
       accessCode,
-      questions: generatedQuestions,
-      createdAt: new Date()
-    };
+      questions: generatedQuestions
+    });
 
-    templatesDb[accessCode] = newTemplate;
+    await newTemplate.save();
 
     res.status(201).json({
       message: 'Interview questions generated successfully for preview.',
@@ -104,17 +68,17 @@ const createTemplate = async (req, res) => {
   }
 };
 
-// 2. Interviewer publishes an interview
 const publishTemplate = async (req, res) => {
   try {
     const { accessCode } = req.body;
-    const template = templatesDb[accessCode];
+    const template = await InterviewTemplate.findOne({ accessCode });
 
     if (!template) {
       return res.status(404).json({ error: 'Interview template not found.' });
     }
 
     template.status = 'published';
+    await template.save();
 
     res.json({
       message: 'Interview published successfully!',
@@ -127,22 +91,23 @@ const publishTemplate = async (req, res) => {
   }
 };
 
-// 3. Get all templates created by interviewer
 const getInterviewerTemplates = async (req, res) => {
   try {
-    const list = Object.values(templatesDb)
-      .filter(t => t.interviewerId === req.userId || req.userRole === 'interviewer')
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const templates = await InterviewTemplate.find(
+      req.userRole === 'interviewer' ? {} : { interviewerId: req.userId }
+    ).sort({ createdAt: -1 });
 
-    // Calculate submission counts for each template
-    const listWithStats = list.map(t => {
-      const attempts = Object.values(interviewsDb).filter(inv => inv.accessCode === t.accessCode || inv.templateId === t.id);
+    const listWithStats = await Promise.all(templates.map(async t => {
+      const attempts = await Interview.find({ 
+        $or: [{ accessCode: t.accessCode }, { templateId: t._id }] 
+      });
       return {
-        ...t,
+        ...t.toObject(),
         attemptsCount: attempts.length,
-        completedCount: attempts.filter(a => a.status === 'completed').length
+        completedCount: attempts.filter(a => a.status === 'completed').length,
+        id: t._id // for frontend compatibility
       };
-    });
+    }));
 
     res.json({ templates: listWithStats });
   } catch (err) {
@@ -150,20 +115,20 @@ const getInterviewerTemplates = async (req, res) => {
   }
 };
 
-// 4. Student looks up published interview by access code
 const getTemplateByAccessCode = async (req, res) => {
   try {
     const code = (req.params.code || '').trim().toUpperCase();
-    const template = templatesDb[code];
+    const template = await InterviewTemplate.findOne({ accessCode: code });
 
     if (!template || template.status !== 'published') {
       return res.status(404).json({ error: 'Published interview not found for this code.' });
     }
 
-    // Check if student has already completed this specific interview
-    const existingSubmission = Object.values(interviewsDb).find(
-      inv => inv.userId === req.userId && inv.accessCode === code && inv.status === 'completed'
-    );
+    const existingSubmission = await Interview.findOne({ 
+      userId: req.userId, 
+      accessCode: code, 
+      status: 'completed' 
+    });
 
     res.json({
       template,
@@ -175,24 +140,27 @@ const getTemplateByAccessCode = async (req, res) => {
   }
 };
 
-// 5. Get student submissions for a specific interviewer template
 const getTemplateSubmissions = async (req, res) => {
   try {
     const { code } = req.params;
-    const template = templatesDb[code];
+    const template = await InterviewTemplate.findOne({ accessCode: code });
 
-    const submissions = Object.values(interviewsDb)
-      .filter(inv => inv.accessCode === code || (template && inv.templateId === template.id))
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const filter = { accessCode: code };
+    if (template) {
+      filter.$or = [{ accessCode: code }, { templateId: template._id }];
+      delete filter.accessCode;
+    }
+
+    const submissions = await Interview.find(filter).sort({ createdAt: -1 });
 
     res.json({
       totalAttempts: submissions.length,
       submissions: submissions.map(s => ({
-        id: s.id,
+        id: s._id,
         studentId: s.userId,
         studentName: s.studentName,
         status: s.status,
-        overallScore: s.finalReport?.overallScore || 80,
+        overallScore: s.finalReport?.overallScore || 0,
         createdAt: s.createdAt,
         finalReport: s.finalReport,
         qnaList: s.qnaList
@@ -203,19 +171,20 @@ const getTemplateSubmissions = async (req, res) => {
   }
 };
 
-// 6. Student starts interview
 const createInterview = async (req, res) => {
   try {
     const { jobRole, experienceLevel, interviewType, difficulty, totalQuestions, accessCode } = req.body;
     
     let template = null;
     if (accessCode) {
-      template = templatesDb[accessCode.toUpperCase()];
+      template = await InterviewTemplate.findOne({ accessCode: accessCode.toUpperCase() });
       
-      // Check duplicate submission rule
-      const existing = Object.values(interviewsDb).find(
-        inv => inv.userId === req.userId && inv.accessCode === accessCode.toUpperCase() && inv.status === 'completed'
-      );
+      const existing = await Interview.findOne({
+        userId: req.userId, 
+        accessCode: accessCode.toUpperCase(), 
+        status: 'completed'
+      });
+      
       if (existing) {
         return res.status(400).json({
           error: 'You have already completed this interview.',
@@ -225,10 +194,9 @@ const createInterview = async (req, res) => {
       }
     }
 
-    const interviewId = `int_${Date.now()}`;
     const userResume = resumeStorage[req.userId];
-
     let firstQuestion;
+
     if (template && template.questions && template.questions.length > 0) {
       firstQuestion = template.questions[0];
     } else {
@@ -243,9 +211,8 @@ const createInterview = async (req, res) => {
       });
     }
 
-    const newInterview = {
-      id: interviewId,
-      templateId: template ? template.id : null,
+    const newInterview = new Interview({
+      templateId: template ? template._id : null,
       interviewerId: template ? template.interviewerId : null,
       accessCode: template ? template.accessCode : null,
       userId: req.userId,
@@ -259,35 +226,34 @@ const createInterview = async (req, res) => {
       status: 'in-progress',
       currentQuestion: firstQuestion,
       qnaList: [],
-      finalReport: null,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+      finalReport: null
+    });
 
-    interviewsDb[interviewId] = newInterview;
+    await newInterview.save();
 
     res.status(201).json({
       message: 'Interview session generated successfully',
-      interview: newInterview
+      interview: {
+        ...newInterview.toObject(),
+        id: newInterview._id // for frontend compatibility
+      }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// 7. Save student answer progressively & evaluate
 const submitAnswer = async (req, res) => {
   try {
     const { interviewId, candidateAnswer, answerType } = req.body;
-    const session = interviewsDb[interviewId];
+    const session = await Interview.findById(interviewId);
 
     if (!session) {
       return res.status(404).json({ error: 'Interview session not found' });
     }
 
-    // AI Evaluation of individual answer
     const evaluation = await evaluateAnswer({
-      question: session.currentQuestion.question,
+      question: session.currentQuestion?.question || '',
       candidateAnswer: candidateAnswer || 'Candidate provided a clear technical response.',
       jobRole: session.jobRole,
       experienceLevel: session.experienceLevel
@@ -295,9 +261,9 @@ const submitAnswer = async (req, res) => {
 
     const qnaEntry = {
       questionId: session.currentQuestionIndex + 1,
-      question: session.currentQuestion.question,
-      category: session.currentQuestion.category || 'Technical',
-      difficulty: session.currentQuestion.difficulty || 'Medium',
+      question: session.currentQuestion?.question || '',
+      category: session.currentQuestion?.category || 'Technical',
+      difficulty: session.currentQuestion?.difficulty || 'Medium',
       candidateAnswer: candidateAnswer || '',
       answerType: answerType || 'text',
       evaluation,
@@ -307,10 +273,10 @@ const submitAnswer = async (req, res) => {
     session.qnaList.push(qnaEntry);
     session.currentQuestionIndex += 1;
 
-    // Check if interview complete
     if (session.currentQuestionIndex >= session.totalQuestionsCount) {
       session.status = 'completed';
       session.finalReport = await generateFinalReport(session);
+      await session.save();
       return res.json({
         completed: true,
         message: 'Interview completed successfully!',
@@ -320,9 +286,8 @@ const submitAnswer = async (req, res) => {
       });
     }
 
-    // Determine next question
     let nextQuestion;
-    const template = session.accessCode ? templatesDb[session.accessCode] : null;
+    const template = session.accessCode ? await InterviewTemplate.findOne({ accessCode: session.accessCode }) : null;
 
     if (template && template.questions && template.questions[session.currentQuestionIndex]) {
       nextQuestion = template.questions[session.currentQuestionIndex];
@@ -341,6 +306,7 @@ const submitAnswer = async (req, res) => {
 
     session.currentQuestion = nextQuestion;
     session.updatedAt = new Date();
+    await session.save();
 
     res.json({
       completed: false,
@@ -357,7 +323,7 @@ const submitAnswer = async (req, res) => {
 const finishInterview = async (req, res) => {
   try {
     const { interviewId } = req.body;
-    const session = interviewsDb[interviewId];
+    const session = await Interview.findById(interviewId);
 
     if (!session) {
       return res.status(404).json({ error: 'Interview session not found' });
@@ -365,6 +331,7 @@ const finishInterview = async (req, res) => {
 
     session.status = 'completed';
     session.finalReport = await generateFinalReport(session);
+    await session.save();
 
     res.json({
       message: 'Interview session completed',
@@ -378,7 +345,7 @@ const finishInterview = async (req, res) => {
 
 const getInterviewById = async (req, res) => {
   try {
-    const session = interviewsDb[req.params.id];
+    const session = await Interview.findById(req.params.id);
     if (!session) {
       return res.status(404).json({ error: 'Interview not found' });
     }
@@ -390,10 +357,7 @@ const getInterviewById = async (req, res) => {
 
 const getInterviewHistory = async (req, res) => {
   try {
-    const list = Object.values(interviewsDb)
-      .filter(item => item.userId === req.userId)
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
+    const list = await Interview.find({ userId: req.userId }).sort({ createdAt: -1 });
     res.json({ history: list });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -410,7 +374,5 @@ module.exports = {
   submitAnswer,
   finishInterview,
   getInterviewById,
-  getInterviewHistory,
-  templatesDb,
-  interviewsDb
+  getInterviewHistory
 };
